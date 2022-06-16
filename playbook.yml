@@ -1,0 +1,79 @@
+---
+- hosts: localhost
+  connection: local
+  vars:
+    pub_key: "{{lookup('file','~/.ssh/id_rsa.pub')}}"
+    ssh_user: "{{lookup('env','USER')}}"
+  vars_files:
+    - azure_cluster.yml
+  tasks:
+    - name: Get my Public IP
+      ipify_facts:
+
+    - name: Create resource group
+      azure_rm_resourcegroup:
+        name: "{{resourcegroup}}"
+        location: eastus
+      register: rg
+
+    - name: Create Security group for ssh
+      azure_rm_securitygroup:
+        resource_group: "{{resourcegroup}}"
+        name: "{{securitygroup}}"
+        rules:
+          - name: SSH_Allow
+            protocol: Tcp
+            destination_port_range: 22
+            access: Allow
+            priority: 102
+            direction: Inbound
+            source_address_prefix:
+              - "{{ipify_public_ip}}"
+      register: sshgrp 
+
+    - name: Create Virtual network
+      azure_rm_virtualnetwork:
+        resource_group: "{{resourcegroup}}"
+        name: "{{virtualnet}}"
+        address_prefixes: "10.10.0.0/16"
+
+    - name: Create Subnet
+      azure_rm_subnet:
+        resource_group: "{{resourcegroup}}"
+        name: "{{subnet}}"
+        virtual_network: virtualnet
+        address_prefix: "10.10.0.0/24"
+
+    - name: Create Subnet for external
+      azure_rm_subnet:
+        resource_group: "{{resourcegroup}}"
+        name: "{{subnet_ext}}"
+        virtual_network: virtualnet
+        address_prefix: "10.10.1.0/24"
+
+    - include_tasks: create_vm.yml
+      vars:
+        host: "{{azure_hosts[item]}}"
+      with_items: "{{azure_hosts}}"
+
+    - name: Debug publicip
+      debug:
+        msg: "{{publicip}}"
+
+    - name: Debug azure_hosts
+      debug:
+        msg: "{{azure_hosts[item].hostname}}"
+      with_items: "{{azure_hosts}}"
+
+    - name: Create/update ssh config
+      blockinfile:
+        path: ~/.ssh/config
+        create: "yes"
+        block: |
+          StrictHostKeyChecking no
+          Host    "{{azure_hosts[item].hostname}}"
+          ProxyCommand ssh -W %h:%p "{{ssh_user}}@{{public_ip}}"
+          UserKnownHostsFile /dev/null
+        marker: "#  {mark} hostname: {{azure_hosts[item].hostname}}  "
+      with_items: "{{azure_hosts}}"
+

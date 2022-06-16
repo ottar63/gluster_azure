@@ -1,0 +1,38 @@
+---
+azure_hosts:
+  glmaster:
+    manager: "True"
+    hostname: glmaster
+    machine_size: Standard_B1s
+    private_ip: 10.10.0.6
+    public_ip: "True"
+  glnode1:
+    workers: "True"
+    hostname: glnode1
+    machine_size: Standard_B1s
+    private_ip: 10.10.0.7
+    manager: "False"
+  glnode2:
+    workers: "True"
+    hostname: glnode2
+    machine_size: Standard_B1s
+    private_ip: 10.10.0.8
+    manager: "False"
+bricks:
+    brick1:
+        name: brick1
+        diskpart: /dev/sdc
+    brick2: 
+        name: brick2
+        diskpart: /dev/sdd
+
+gfsvol: gfsvol
+gfsreplica: 2
+resourcegroup: glusterfs_rg
+securitygroup: ssh_grp
+virtualnet: virtualnet
+manager_host: glmaster
+subnet: subnet
+subnet_ext: subnet_ext
+ssh_user: "{{lookup('env','USER')}}"
+publicip: {}

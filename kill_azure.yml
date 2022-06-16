@@ -1,0 +1,10 @@
+---
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: Delete Resourcegroup
+      azure_rm_resourcegroup:
+        name: glusterfs_rg
+        location: eastus
+        state: absent
+        force_delete_nonempty: yes

@@ -1,0 +1,23 @@
+---
+- name: Debug bricks
+  debug:
+    msg: "{{host.hostname}}{{bricks[inner].name}}"
+  with_items: "{{bricks}}"
+  loop_control:
+    loop_var: inner
+
+- name: Create Managed disk
+  azure_rm_manageddisk:
+    name: "{{host.hostname}}{{bricks[inner].name}}"
+    resource_group: "{{resourcegroup}}"
+    managed_by: "{{host.hostname}}"
+    disk_size_gb: 32
+  with_items: "{{bricks}}"
+  loop_control:
+    loop_var: inner
+  register: managed_disk
+
+
+- name: Debug managed_disks
+  debug:
+    msg: "{{managed_disk}}"

@@ -1,0 +1,124 @@
+---
+- hosts: all
+  become: true
+  vars_files: azure_cluster.yml
+
+  tasks:
+  - name: Edit /etc/hosts
+    lineinfile:
+      path: /etc/hosts
+      line: "{{azure_hosts[item].private_ip}} {{azure_hosts[item].hostname}}"
+    with_items: "{{azure_hosts}}"
+
+  - name: create partition
+    parted:
+      device: "{{bricks[item].diskpart}}"
+      number: 1
+      state: present
+    with_items: "{{bricks}}"
+
+  - name: Create filesystem
+    filesystem:
+      dev: "{{bricks[item].diskpart}}1"
+      fstype: xfs
+    with_items: "{{bricks}}"
+
+  - name: Install GlusterFS
+    apt: 
+      name: glusterfs-server
+      state: present
+      update-cache: yes
+
+  - name: Start Gluster Service
+    service:
+      name: glusterd
+      state: started
+
+  - name: make mountpoint
+    file:
+      path: "/bricks/{{item}}"
+      state: directory
+    with_items: "{{bricks}}" 
+
+  - name: Mount filesystems
+    mount:
+      src: "{{bricks[item].diskpart}}1"
+      path: "/bricks/{{item}}/"
+      fstype: xfs
+      state: mounted
+    with_items: "{{bricks}}"
+
+  - name: Create volume directory
+    file:
+      path: "/bricks/{{item}}/vol"
+      state: directory
+    with_items: "{{bricks}}"
+
+  - name: Create list of nodes
+    set_fact: 
+      nodes: "{{nodes|default([]) + [item]}}"
+    when: item != 'glmaster'
+    with_items: "{{azure_hosts}}"
+
+  - name: Debug node list
+    debug:
+      msg: "{{nodes}}"
+
+  - name: Set up peers
+    gluster_peer:
+      state: present
+      nodes: "{{ nodes }}"
+    when: ansible_hostname == 'glmaster'
+
+
+  #- name: Create volume string
+  #  set_fact:
+  #    volstring: "{{volstring|default('')}}  {{item[0]}}:/bricks/{{item[1]}}/vol"
+  #  with_nested:
+  #    - "{{azure_hosts}}"
+  #    - "{{bricks}}"
+  #  when: ansible_hostname == 'glmaster'
+    
+  - name: Create bricks list
+    set_fact: 
+      all_bricks: "{{ all_bricks | default([])}} + ['/bricks/{{ item }}/vol']"
+    with_items: "{{ bricks }}"
+
+  - name: Create bricks string
+    set_fact: 
+      brick_string: "{{ all_bricks | join(',') }}"
+
+  - name: create list of all nodes
+    set_fact:
+      all_nodes: "{{ all_nodes | default([])}} + ['{{ item }}']"
+    with_items: "{{ azure_hosts }}"
+
+  - name: Debug Vol parameters
+    debug:
+      msg: "Brick strings: {{ brick_string }} \n all_nodes : {{ all_nodes }}"
+
+  - name: Create gluster volume
+    gluster_volume:
+      state: present
+      name: "{{ gfsvol }}"
+      bricks: "{{ brick_string }}"
+      cluster: "{{ all_nodes }}"
+      replicas: "{{ gfsreplica }}"
+    run_once: true  
+      
+  - name: Make mountpoint for gluster volume
+    file:
+      path: /gmount
+      state: directory
+   
+  - name:  Mount gluservolume
+    mount:
+      path: /gmount
+      fstype: glusterfs
+      src: "glmaster:/{{ gfsvol }}"
+      state: present   
+  #- name: Debug vol string
+  #  debug:
+  #    msg: "{{volstring}}"
+  #  when: ansible_hostname == 'glmaster'
+    

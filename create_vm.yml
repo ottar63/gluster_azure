@@ -1,0 +1,73 @@
+---
+- name: Create public ip
+  azure_rm_publicipaddress:
+    resource_group: "{{resourcegroup}}"
+    allocation_method: Static
+    name: publicip001
+  register: publicip
+  when: host.public_ip is defined
+
+- name: Set Fact for public IP
+  set_fact:
+      public_ip: "{{publicip.state.ip_address}}"
+  when: host.public_ip is defined
+
+
+
+- name: Create Network Interface for Public Net
+  azure_rm_networkinterface:
+    resource_group: "{{resourcegroup}}"
+    virtual_network: "{{virtualnet}}"
+    name: "{{host.hostname}}_public_if"
+    ip_configurations:
+      - name: pub_ip_001
+        public_ip_address_name: publicip001
+    subnet: "{{subnet_ext}}"
+    security_group: "{{securitygroup}}"
+  when: host.public_ip is defined
+
+
+- name: Create Network Interface for Private network
+  azure_rm_networkinterface:
+    resource_group: "{{resourcegroup}}"
+    name: "{{host.hostname}}_private_if"
+    virtual_network: "{{virtualnet}}"
+    subnet: "{{subnet}}"
+    ip_configurations:
+      - private_ip_allocation_method: Static
+        name: "{{host.hostname}}_private_ip"
+        private_ip_address: "{{host.private_ip}}"
+  register: netw
+
+- name: create interface array 1
+  set_fact:
+    network_if: "{{host.hostname}}_private_if"
+
+- name: create interface array 2
+  set_fact:
+    network_if: "{{host.hostname}}_public_if+{{network_if}}"
+  when: host.public_ip is defined
+
+- name: Create Virtual machine 
+  azure_rm_virtualmachine:
+    resource_group: "{{resourcegroup}}"
+    vm_size: "{{host.machine_size}}"
+    name: "{{host.hostname}}"
+    # os_disk_size_gb: 16
+    # storage_account: ansibleaccount001
+    # storage_container: ansiblevm001
+    # storage_blob: "{{host.hostname}}.vhd"
+    network_interfaces: "{{network_if.split('+')}}"
+    admin_username: "{{ssh_user}}"
+    ssh_password_enabled: false
+    ssh_public_keys:
+      - path: "/home/{{ssh_user}}/.ssh/authorized_keys"
+        key_data: "{{pub_key}}"
+    image:
+      offer: 0001-com-ubuntu-server-focal
+      publisher: Canonical
+      sku: '20_04-lts'
+      version: latest
+    managed_disk_type: Premium_LRS
+
+- include_tasks: managed_disks.yml
