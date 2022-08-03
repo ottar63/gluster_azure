@@ -116,7 +116,9 @@
       path: /gmount
       fstype: glusterfs
       src: "glmaster:/{{ gfsvol }}"
-      state: present   
+      state: mounted
+    when: ansible_hostname == 'glmaster'
+    
   #- name: Debug vol string
   #  debug:
   #    msg: "{{volstring}}"
